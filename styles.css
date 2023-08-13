@@ -1,0 +1,39 @@
+:root {
+    background: #F96CB0;
+  }
+  
+.gen, .download {
+    background: #1FDE0E;
+    padding: 8px 16px;
+    cursor: pointer;
+    font-family: 'Sora', sans-serif; 
+    font-size: 23px;
+    width: 9rem;
+    height: 3rem;
+    position: relative;
+    left: 3rem;
+    top: 3rem;
+    
+  }
+
+.gen:hover {
+    background: #2bba2e;
+    transition: all 0.2s ease-in-out;
+    transform: scale(1.1);
+  }
+  
+.gen:active {
+    background: #9500ff;
+}
+.upload{
+    position: relative;
+    left: 40%;
+    top: 5rem;
+}
+label{
+    font-family: 'Sora', sans-serif;
+    font-size: 25px;
+    position: relative;
+    left: 3rem;
+    top: -1.5rem;
+}

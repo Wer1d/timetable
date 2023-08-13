@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <title>Time Table Generator</title>
+</html>
+<style>
+    body {
+      background-color: #F96CB0; 
+    }
+
+    h1 {
+      color: #000000;
+      text-align: center;
+    }
+
+    .head{
+        background-color: #FFFFFF;
+        padding: 10px;
+        margin: 10px;
+        border-radius: 10px;
+        font-family: 'Sora', sans-serif; 
+        font-size: 15px;
+    }
+
+    #fileInput {
+        font-family: 'Sora', sans-serif; 
+        font-size: 20px;
+    }
+
+    .main{
+        text-align: center;
+    }
+
+    #upload {
+        background: #1FDE0E;
+        padding: 8px 16px;
+        cursor: pointer;
+        font-family: 'Sora', sans-serif; 
+        font-size: 23px;
+    }
+
+    #upload:hover {
+        background: #2bba2e;
+        transition: all 0.2s ease-in-out;
+        transform: scale(1.1);
+    }
+    
+    #upload:active {
+        background: #9500ff;
+    }
+
+    p{
+        font-family: 'Sora', sans-serif; 
+        font-size: 20px;
+        text-align: center;
+        font-weight: bold;
+    }
+  </style>
+
+<body>
+<div class="head"> 
+    <h1>Time Table Generator</h1>
+</div>
+<div class="main">
+    <input type="file" id="fileInput" name="csvFile" accept=".csv">
+    <button id="upload" onclick="uploadFile()">Upload</button>
+    <p>โปรดใส่ข้อมูลให้ครบทุกแถว และอย่าเว้นแถว</p>
+    <a href="https://timetablebuckettt.s3.amazonaws.com/SciFirstYearClass+-+66_1.csv" download>ตัวอย่าง</a>
+</div>
+    <script>
+        function uploadFile() {
+            var fileInput = document.getElementById('fileInput');
+            var file = fileInput.files[0];
+
+            if (file) {
+                var formData = new FormData();
+                formData.append('file', file);
+                var xhr = new XMLHttpRequest();
+                xhr.open('POST', 'https://yqvna38jii.execute-api.us-east-1.amazonaws.com/default/timetable', true);
+                xhr.responseType = 'blob'
+
+                    xhr.onload = function() {
+                        fileInput.value = '';
+                        if (xhr.status === 200) {
+                            // xhr.responseType = 'blob'
+                            var link = document.createElement('a');
+                            link.download = xhr.getResponseHeader("Filename");
+
+                            var blob = xhr.response;
+
+                            var url = window.URL.createObjectURL(blob) || window.webkitURL.createObjectURL(blob);
+
+                            link.href = url;
+                            link.click(); 
+                            URL.revokeObjectURL(url);
+
+                        } else {
+                    
+                            var contentType = xhr.getResponseHeader('Content-Type');
+                            if (contentType && contentType.indexOf('text/plain') !== -1) {
+                            var reader = new FileReader();
+                            reader.onload = function() {
+                                var jsonResponse = JSON.parse(reader.result);
+                                var errorMsg = jsonResponse.error;
+                                alert(errorMsg);
+                            };
+                            reader.readAsText(xhr.response);
+                            } else {
+                            console.log(xhr.response);
+                            alert('An error occurred..');
+                            
+                        } 
+                    }
+                    };
+                xhr.send(formData);
+            } else {
+                document.getElementById('response').innerText = 'No file selected.';
+            }
+        }
+    </script>
+</body>
+</html>
