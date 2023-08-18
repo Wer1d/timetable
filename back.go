@@ -16,6 +16,7 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
+var groupIndex, totalIndex int
 var mutex sync.Mutex
 var courseData []map[string]interface{}
 var majorData map[string][]interface{}
@@ -53,14 +54,15 @@ func findMajor(groupList [][]string) map[string][]interface{} {
 
 func courseToDict() []map[string]interface{} { //majorData map[string][]interface{}
 	data := []map[string]interface{}{}
-	for i := 1; i < len(courseList); i++ {
+	for i := 0; i < len(courseList); i++ {
 		// [[1661 2301107 CALCULUS I 7 LEC MO WE FR 09:00-10:00 TAB-221 1 2 3 4],
 		//  [1661 2302111 GEN CHEM I 3 LEC MO WE FR 11:00-12:00 MHMK-202 1 45 32 29 30 43 44 31 42]]
 
 		rowData := map[string]interface{}{}
-		row := courseList[i] // ["1661","230242","CALCULUS I","7","LEC","MO WE FR","09:00-10:00","TAB-221","20 21 22 39"]
+		row := courseList[i] // ["1661","230242","CALCULUS I","7","LEC","MO WE FR","09:00-10:00","TAB-221","20", "21", "22", "39","","",""]
 
 		if len(row) > 6 && row[1] != "GEN ED" {
+
 			rowData["Term"] = row[0]
 			rowData["Course Number"] = row[1]
 			rowData["Course Title"] = row[2]
@@ -69,7 +71,7 @@ func courseToDict() []map[string]interface{} { //majorData map[string][]interfac
 			rowData["Meeting Day"] = row[5]
 			rowData["Meeting Time"] = row[6]
 			rowData["Room"] = row[7]
-			rowData["GROUP"] = strings.Join(row[8:], " ")
+			rowData["GROUP"] = strings.TrimSpace(strings.Join(row[8:], " ")) // tri, empty space after join
 
 			data = append(data, rowData)
 		}
@@ -88,84 +90,121 @@ func handleSend(ctx context.Context, r events.APIGatewayProxyRequest) (events.AP
 	lines := strings.Split(data, "\r\n")
 	log.Println("lines : ", lines)
 	// Process each line
+	modifiedLines := make([]string, 0, len(lines))
 	for _, line := range lines {
-		log.Println("line : " + line)
+		if line == "" || strings.HasPrefix(line, "----") || strings.HasPrefix(line, "Content") || strings.HasPrefix(line, "รวม") {
+			continue
+		}
+		modifiedLines = append(modifiedLines, line)
 	}
+	log.Println("modifiedLines : ", modifiedLines) // delete header
+	//extract header
+	header := make([]string, 0, len(lines))
+	for i, row := range modifiedLines {
+		if i == 1 {
+			break
+		}
+		header = strings.Split(row, ",")
 
+	}
+	log.Println("header : ", header)
+	// find index of header
+	for k, v := range header {
+		if "GROUP" == v {
+			groupIndex = k
+		}
+		if "Total" == v {
+			totalIndex = k
+		}
+	}
 	// raw data -> courseList, groupList -> majorData, courseData
-	for _, row := range lines {
+	for _, row := range modifiedLines {
 		if row == "" || strings.HasPrefix(row, "----") || strings.HasPrefix(row, "Content") || strings.HasPrefix(row, "Term") || strings.HasPrefix(row, "รวม") {
 			continue
 		}
 
-		fields := strings.Split(row, ",")
-		var modifiedFields []string
-		for _, elem := range fields {
-			if elem != "" {
-				modifiedFields = append(modifiedFields, elem)
+		fields := strings.Split(row, ",") // arr ของแถว
+		if fields[0] == "" {
+			continue
+		}
+		log.Println("fields : ", fields, "\n len(fields) : ", len(fields)) // each row with empty string
+		log.Println("groupIndex : ", groupIndex)
+		log.Println("totalIndex : ", totalIndex)
+		courseFields := make([]string, 0, len(fields)-5)
+		groupFields := make([]string, 0, 3)
+		for i, field := range fields {
+			if i < groupIndex {
+				courseFields = append(courseFields, field)
+			} else if i < totalIndex { // จัดการข้อมูลก่อน group
+				if field != "" {
+					courseFields = append(courseFields, field)
+				}
+			} else if i > totalIndex {
+				if field == "" || field == "รวม" {
+					break
+				}
+				groupFields = append(groupFields, field)
+			}
+
+			// if len(fields) < 7 {
+			// 	courseFields := make([]string, 0, len(fields)-5)
+			// 	groupFields := make([]string, 0, 3)
+			// 	if fields[len(fields)-2] == "รวม" {
+
+			// 		for i, field := range fields {
+			// 			log.Println(i, ":"+field)
+			// 			if i < len(fields)-3 {
+			// 				field = strings.TrimSpace(field)
+			// 				if field != "" {
+			// 					courseFields = append(courseFields, field)
+			// 				}
+			// 			}
+			// 		}
+
+			// 	} else if strings.HasPrefix(fields[len(fields)-3], "239") { // case ที่มี group data
+			// 		log.Println("else if case passed")
+			// 		for i, field := range fields {
+
+			// 			if i >= len(fields)-3 {
+			// 				log.Println("i : ", i)
+			// 				log.Println("i >len(fields)-4", i > len(fields)-4)
+			// 				groupFields = append(groupFields, field)
+			// 				log.Println("groupFields : ", groupFields)
+
+			// 			} else {
+			// 				if i == len(fields)-4 {
+			// 					continue
+			// 				}
+			// 				field = strings.TrimSpace(field)
+			// 				if field != "" {
+			// 					courseFields = append(courseFields, field)
+			// 				}
+			// 			}
+			// 		}
+			// 	} else { // case ที่มีแต่ course data
+			// 		for i, field := range fields {
+			// 			if i == len(fields)-1 {
+			// 				break
+			// 			}
+			// 			field = strings.TrimSpace(field)
+			// 			if field != "" {
+			// 				courseFields = append(courseFields, field)
+			// 			}
+			// 		}
+			// 	}
+		}
+		courseList = append(courseList, courseFields)
+		groupList = append(groupList, groupFields)
+
+		var newGroupList [][]string
+		for _, elem := range groupList {
+			if len(elem) > 0 {
+				newGroupList = append(newGroupList, elem)
 			}
 		}
-		log.Println("modifiedFields : ", modifiedFields)
-
-		if len(modifiedFields) > 8 {
-			courseFields := make([]string, 0, len(modifiedFields)-5)
-			groupFields := make([]string, 0, 3)
-			if modifiedFields[len(modifiedFields)-2] == "รวม" {
-
-				for i, field := range modifiedFields {
-					log.Println(i, ":"+field)
-					if i < len(modifiedFields)-3 {
-						field = strings.TrimSpace(field)
-						if field != "" {
-							courseFields = append(courseFields, field)
-						}
-					}
-				}
-
-			} else if strings.HasPrefix(modifiedFields[len(modifiedFields)-3], "239") { // case ที่มี group data
-				log.Println("else if case passed")
-				for i, field := range modifiedFields {
-
-					if i >= len(modifiedFields)-3 {
-						log.Println("i : ", i)
-						log.Println("i >len(modifiedFields)-4", i > len(modifiedFields)-4)
-						groupFields = append(groupFields, field)
-						log.Println("groupFields : ", groupFields)
-
-					} else {
-						if i == len(modifiedFields)-4 {
-							continue
-						}
-						field = strings.TrimSpace(field)
-						if field != "" {
-							courseFields = append(courseFields, field)
-						}
-					}
-				}
-			} else { // case ที่มีแต่ course data
-				for i, field := range modifiedFields {
-					if i == len(modifiedFields)-1 {
-						break
-					}
-					field = strings.TrimSpace(field)
-					if field != "" {
-						courseFields = append(courseFields, field)
-					}
-				}
-			}
-			courseList = append(courseList, courseFields)
-			groupList = append(groupList, groupFields)
-
-			var newGroupList [][]string
-			for _, elem := range groupList {
-				if len(elem) > 0 {
-					newGroupList = append(newGroupList, elem)
-				}
-			}
-			groupList = newGroupList
-		}
-
+		groupList = newGroupList
 	}
+
 	// }
 	log.Println("courseList : ", courseList)
 	log.Println("groupList : ", groupList)
@@ -245,6 +284,7 @@ func handleSend(ctx context.Context, r events.APIGatewayProxyRequest) (events.AP
 				"Access-Control-Expose-Headers": "Filename",
 			},
 		}, nil
+
 	}
 	// if error return error message
 	errorMsgg := errorMsg
@@ -254,7 +294,9 @@ func handleSend(ctx context.Context, r events.APIGatewayProxyRequest) (events.AP
 		StatusCode: 500,
 		Body:       `{"error": "` + errorMsgg + `"}`,
 	}, nil
+
 }
+
 func PrintSchedule(entryList []map[string]interface{}, gid string, majorName []interface{}) {
 	mutex.Lock()
 	defer mutex.Unlock()
@@ -299,13 +341,20 @@ func PrintSchedule(entryList []map[string]interface{}, gid string, majorName []i
 	for i := 0; i < len(entryList); i++ {
 		// loop row ที่มี group นั้น
 		var entry = entryList[i]
+		if entry["Meeting Day"].(string) == "" {
+			errorMsg = fmt.Sprintf("Please insert Meeting Day for %s", entry["Course Number"].(string))
+			return
+		}
 		var dayss = entry["Meeting Day"].(string)
 		dayList := strings.Split(dayss, " ")
 
 		for d := 0; d < len(dayList); d++ {
 
 			decorateTable(entryList, gid, majorName, semester, year, sheetName)
-
+			if entry["Meeting Time"].(string) == "" {
+				errorMsg = fmt.Sprintf("Please insert Meeting time for %s", entry["Course Number"].(string))
+				return
+			}
 			var timeSlot = getTime(entry["Meeting Time"].(string)) // 11-12
 			var daySlot = decodeDay(dayList[d])                    // แปลงวันเป็นเลข เช่น MON = 0
 
@@ -313,8 +362,12 @@ func PrintSchedule(entryList []map[string]interface{}, gid string, majorName []i
 
 			var text = entry["Course Number"].(string)
 			text += "\n" + entry["Course Title"].(string)
-			text += "\n" + "(Sec " + entry["Section"].(string) + ")" + "\n" + entry["Room"].(string)
+			if entry["Room"].(string) == "" {
+				text += "\n" + "(Sec " + entry["Section"].(string) + ")" + "\n" + "AR"
+			} else {
 
+				text += "\n" + "(Sec " + entry["Section"].(string) + ")" + "\n" + entry["Room"].(string)
+			}
 			// check that cell is available
 			if isCellAvailable(sheetName, cell, timeSlot[1]-timeSlot[0]) {
 
@@ -351,7 +404,12 @@ func PrintSchedule(entryList []map[string]interface{}, gid string, majorName []i
 					f.SetCellStyle(sheetName, startCell, endCell, style)
 
 					text += "\n" + entry["Course Title"].(string)
-					text += "\n" + "(Sec " + entry["Section"].(string) + ")" + "\n" + entry["Room"].(string)
+					if entry["Room"].(string) == "" {
+						text += "\n" + "(Sec " + entry["Section"].(string) + ")" + "\n" + "AR"
+					} else {
+
+						text += "\n" + "(Sec " + entry["Section"].(string) + ")" + "\n" + entry["Room"].(string)
+					}
 					f.SetCellValue(sheetName, startCell, text)
 
 				} else { // course is 1 hour
@@ -378,7 +436,12 @@ func PrintSchedule(entryList []map[string]interface{}, gid string, majorName []i
 					f.SetCellStyle(sheetName, cell, cell, style)
 
 					text += "\n" + entry["Course Title"].(string)
-					text += "\n" + "(Sec " + entry["Section"].(string) + ")" + "\n" + entry["Room"].(string)
+					if entry["Room"].(string) == "" {
+						text += "\n" + "(Sec " + entry["Section"].(string) + ")" + "\n" + "AR"
+					} else {
+
+						text += "\n" + "(Sec " + entry["Section"].(string) + ")" + "\n" + entry["Room"].(string)
+					}
 					f.SetCellValue(sheetName, cell, text)
 				}
 
